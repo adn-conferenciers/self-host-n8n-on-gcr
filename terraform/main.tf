@@ -59,7 +59,7 @@ resource "google_sql_database_instance" "n8n_db_instance" {
   name             = "${var.cloud_run_service_name}-db"
   project          = var.gcp_project_id
   region           = var.gcp_region
-  database_version = "POSTGRES_16"
+  database_version = "POSTGRES_15"
   settings {
     tier              = var.db_tier
     availability_type = "ZONAL"
@@ -164,12 +164,16 @@ resource "google_project_iam_member" "sql_client" {
 locals {
   # Use official image or custom image based on variable
   n8n_image = var.use_custom_image ? "${var.gcp_region}-docker.pkg.dev/${var.gcp_project_id}/${var.artifact_repo_name}/${var.cloud_run_service_name}:latest" : "docker.io/n8nio/n8n:latest"
-  
+
   # Port configuration differs between options
   n8n_port = var.use_custom_image ? "443" : "5678"
-  
+
   # User folder differs between options
   n8n_user_folder = var.use_custom_image ? "/home/node" : "/home/node/.n8n"
+
+  # Use custom domain if provided, otherwise use default Cloud Run URL
+  n8n_host     = var.custom_domain != "" ? var.custom_domain : "${var.cloud_run_service_name}-${data.google_project.project.number}.${var.gcp_region}.run.app"
+  n8n_base_url = var.custom_domain != "" ? "https://${var.custom_domain}" : "https://${var.cloud_run_service_name}-${data.google_project.project.number}.${var.gcp_region}.run.app"
 }
 
 resource "google_cloud_run_v2_service" "n8n" {
@@ -288,15 +292,15 @@ resource "google_cloud_run_v2_service" "n8n" {
       }
       env {
         name  = "N8N_HOST"
-        value = "${var.cloud_run_service_name}-${data.google_project.project.number}.${var.gcp_region}.run.app"
+        value = local.n8n_host
       }
       env {
         name  = "WEBHOOK_URL"
-        value = "https://${var.cloud_run_service_name}-${data.google_project.project.number}.${var.gcp_region}.run.app"
+        value = local.n8n_base_url
       }
       env {
         name  = "N8N_EDITOR_BASE_URL"
-        value = "https://${var.cloud_run_service_name}-${data.google_project.project.number}.${var.gcp_region}.run.app"
+        value = local.n8n_base_url
       }
       env {
         name  = "N8N_RUNNERS_ENABLED"
@@ -338,4 +342,22 @@ resource "google_cloud_run_v2_service_iam_member" "n8n_public_invoker" {
   name     = google_cloud_run_v2_service.n8n.name
   role     = "roles/run.invoker"
   member   = "allUsers"
+}
+
+# --- Custom Domain Mapping --- #
+resource "google_cloud_run_domain_mapping" "n8n_domain" {
+  count    = var.custom_domain != "" ? 1 : 0
+  location = var.gcp_region
+  name     = var.custom_domain
+  project  = var.gcp_project_id
+
+  metadata {
+    namespace = var.gcp_project_id
+  }
+
+  spec {
+    route_name = google_cloud_run_v2_service.n8n.name
+  }
+
+  depends_on = [google_cloud_run_v2_service.n8n]
 }

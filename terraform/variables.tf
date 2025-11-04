@@ -86,3 +86,9 @@ variable "generic_timezone" {
   type        = string
   default     = "UTC"
 }
+
+variable "custom_domain" {
+  description = "Custom domain for n8n service (e.g., 'n8n.yourdomain.com'). Leave empty to skip domain mapping."
+  type        = string
+  default     = ""
+}
