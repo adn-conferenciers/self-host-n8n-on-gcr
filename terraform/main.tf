@@ -59,7 +59,7 @@ resource "google_sql_database_instance" "n8n_db_instance" {
   name             = "${var.cloud_run_service_name}-db"
   project          = var.gcp_project_id
   region           = var.gcp_region
-  database_version = "POSTGRES_13"
+  database_version = "POSTGRES_16"
   settings {
     tier              = var.db_tier
     availability_type = "ZONAL"
